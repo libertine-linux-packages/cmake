@@ -1,0 +1,130 @@
+# This file is part of libertine linux's package zlib. It is subject to the license terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/zlib/master/COPYRIGHT. No part of libertine linux's package zlib, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2016 The developers of libertine linux's package zlib. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/zlib/master/COPYRIGHT.
+
+
+variant=upstream
+
+depends build_ccache
+build_needs ccache
+
+depends build_gnumake
+build_needs make
+
+depends build_busybox
+build_needs sh cat sed uname grep rm mv diff dirname
+
+build_provides cmake cpack ctest
+
+case "$package" in
+	
+	build_cmake)
+		
+		build_needs "$libertine_build"-cc "$libertine_build"-c++ "$libertine_build"-ar "$libertine_build"-ranlib "$libertine_build"-as "$libertine_build"-ld "$libertine_build"-strip  "$libertine_build"-nm "$libertine_build"-objcopy "$libertine_build"-objdump "$libertine_build"-readelf
+		depends build_musl_cross_make_build
+
+		libertine_compile_build_cmake()
+		{
+			local target="$libertine_build"
+			local prefix="$(libertine_public_outputBuildSysrootPath)"/usr
+			local sysrootPath="$(libertine_public_outputBuildSysrootPath)"
+			local cCompilerFlags="$(libertine_public_buildCCompilerFlags)"
+			local cxxCompilerFlags="$(libertine_public_buildCxxCompilerFlags)"
+			
+			# Bootstrap seems to struggle to find these when cross-compiling. Help it.
+			# Otherwise have an --init=CACHE_FILE to add to Bootstrap.cmk/InitialCacheFlags.cmake
+			# With lines of the form   set (CMAKE_XDGDATA_DIR "" CACHE PATH "Install location for XDG specific files (relative to prefix)." FORCE)
+			pushd "$(libertine_public_buildNeedsPath)"
+				
+				local binaryBootstrapCanNotFindFromToolchainPrefix
+				for binaryBootstrapCanNotFindFromToolchainPrefix in ar ranlib ld strip objdump objcopy nm readelf
+				do
+					ln -s "$target"-"$binaryBootstrapCanNotFindFromToolchainPrefix" "$binaryBootstrapCanNotFindFromToolchainPrefix"
+				done
+			
+			popd
+			
+			pushd "$(libertine_public_sourcePath)"
+				
+				if $libertine_makeDebug; then
+					local maximumJobs=1
+				else
+					local maximumJobs=$((cpucount_makeJobs * 2))
+				fi
+				
+				
+				
+				
+				MAKE='make' \
+				CC="$target-cc" \
+				CFLAGS="$cCompilerFlags" \
+				CXX="$target-c++" \
+				CXXFLAGS="$cxxCompilerFlags" \
+				sh bootstrap --prefix="$prefix" --verbose --parallel="$maximumJobs" --enable-ccache --no-system-libs 1>&2
+		
+				sed -i -e 's;SHELL = /bin/sh/;SHELL = '"$(libertine_public_buildNeedsPath)"/sh';g' Makefile
+		
+				# Find cmake version
+				local cmake_version_major="$(sed -n "/^set(CMake_VERSION_MAJOR/ {s/set(CMake_VERSION_MAJOR *\([0-9]*\))/\1/;p;}" "Source/CMakeVersion.cmake")"
+				local cmake_version_minor="$(sed -n "/^set(CMake_VERSION_MINOR/ {s/set(CMake_VERSION_MINOR *\([0-9]*\))/\1/;p;}" "Source/CMakeVersion.cmake")"
+				local cmake_version_patch="$(sed -n "/^set(CMake_VERSION_PATCH/ {s/set(CMake_VERSION_PATCH *\([0-9]*\))/\1/;p;}" "Source/CMakeVersion.cmake")"
+				local cmake_version="${cmake_version_major}.${cmake_version_minor}.${cmake_version_patch}"
+				local cmake_version_rc="$(sed -n "/^set(CMake_VERSION_RC/ {s/set(CMake_VERSION_RC *\([0-9]*\))/\1/;p;}" "Source/CMakeVersion.cmake")"
+				if [ "$cmake_version_rc" != "" ]; then
+					cmake_version="${cmake_version}-rc${cmake_version_rc}"
+				fi
+				
+				# Fix up paths for AR, RANLIB, etc
+					sed -i \
+						-e 's;CMAKE_AR-NOTFOUND;'"$target-ar"';g' \
+						-e 's;CMAKE_LINKER-NOTFOUND;'"$target-c"';g' \
+						-e 's;CMAKE_NM-NOTFOUND;'"$target-nm"';g' \
+						-e 's;CMAKE_OBJCOPY-NOTFOUND;'"$target-objcopy"';g' \
+						-e 's;CMAKE_OBJDUMP-NOTFOUND;'"$target-objdump"';g' \
+						-e 's;CMAKE_STRIP-NOTFOUND;'"$target-strip"';g' \
+						-e 's;/bin/gzip;gzip;g' \
+						-e 's;/usr/bin/gcov;gcov;g' \
+						-e 's;/usr/bin/git;git;g' \
+						-e 's;/bin/gunzip;gunzip;g' \
+						-e 's;READELF_EXECUTABLE:FILEPATH=.*;READELF_EXECUTABLE:FILEPATH='"$target-readelf"';g' \
+						-e 's;CMAKE_RANLIB:INTERNAL=:;CMAKE_RANLIB:INTERNAL='"$target-ranlib"';g' \
+						CMakeCache.txt
+					
+					sed -i \
+						-e 's/CMAKE_AR-NOTFOUND/'"$target-ar"'/g' \
+						-e 's/:/'"$target-ranlib"'/g' \
+						-e 's/CMAKE_LINKER-NOTFOUND/'"$target-c"'/g' \
+						"CMakeFiles/${cmake_version}/CMakeCCompiler.cmake"
+				
+					# Different Linker (-cxx vs -cc)
+					sed -i \
+						-e 's/CMAKE_AR-NOTFOUND/'"$target-ar"'/g' \
+						-e 's/:/'"$target-ranlib"'/g' \
+						-e 's/CMAKE_LINKER-NOTFOUND/'"$target-cxx"'/g' \
+						"CMakeFiles/${cmake_version}/CMakeCXXCompiler.cmake"
+				
+				# Force cross compiling
+				sed -i -e 's/FALSE/TRUE/g' "CMakeFiles/${cmake_version}/CMakeSystem.cmake"
+								
+				libertine_public_make
+				
+				libertine_public_make install
+		
+			popd
+		}
+		
+	;;
+	
+	cmake)
+		
+		build_needs "$libertine_host"-cc "$libertine_host"-c++ "$libertine_host"-ar "$libertine_host"-ranlib "$libertine_host"-as "$libertine_host"-ld "$libertine_host"-strip
+		depends build_musl_cross_make_host
+		
+		libertine_compile_cmake()
+		{
+			printf '%s\n' 'Not supported - use the build_cmake' 1>&2
+			exit 99
+		}
+		
+	;;
+	
+esac
