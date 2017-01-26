@@ -19,7 +19,7 @@ case "$package" in
 	
 	build_cmake)
 		
-		build_needs "$libertine_build"-cc "$libertine_build"-c++ "$libertine_build"-ar "$libertine_build"-ranlib "$libertine_build"-as "$libertine_build"-ld "$libertine_build"-strip  "$libertine_build"-nm "$libertine_build"-objcopy "$libertine_build"-objdump "$libertine_build"-readelf
+		build_needs "$libertine_build"-cc "$libertine_build"-c++ "$libertine_build"-ar "$libertine_build"-ranlib "$libertine_build"-as "$libertine_build"-ld "$libertine_build"-strip "$libertine_build"-nm "$libertine_build"-objcopy "$libertine_build"-objdump "$libertine_build"-readelf
 		depends build_musl_cross_make_build
 
 		libertine_compile_build_cmake()
